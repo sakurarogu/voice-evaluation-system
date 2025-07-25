@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声評価システム</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .audio-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+        }
+        .audio-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+        }
+        audio {
+            width: 300px;
+        }
+        
+        /* 表形式の評価UI */
+        .evaluation-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            background: white;
+        }
+        .evaluation-table th,
+        .evaluation-table td {
+            padding: 12px 8px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        .evaluation-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .evaluation-table .item-name {
+            text-align: left;
+            font-weight: bold;
+            background-color: #fafafa;
+            min-width: 120px;
+        }
+        .evaluation-table .scale-labels {
+            background-color: #fafafa;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        .evaluation-table .radio-cell {
+            width: 40px;
+            padding: 8px;
+        }
+        .evaluation-table input[type="radio"] {
+            transform: scale(1.2);
+            cursor: pointer;
+        }
+        .evaluation-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .evaluation-table tr:hover {
+            background-color: #f0f8ff;
+        }
+        
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 30px;
+        }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+        .completion-screen {
+            text-align: center;
+            padding: 40px;
+            display: none;
+        }
+        .completion-screen h2 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        .results-summary {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .instruction {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+        .info-form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+        .form-group label {
+            min-width: 80px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .start-screen {
+            text-align: center;
+        }
+        .evaluation-warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #ffeaa7;
+            text-align: center;
+        }
+        
+        /* デバッグ情報 */
+        .debug-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #495057;
+            /* デバッグ用：本番では display: none; にする */
+            display: block;
+        }
+        .debug-info.hidden {
+            display: none;
+        }
+        .debug-info h4 {
+            margin: 0 0 10px 0;
+            color: #007bff;
+            font-family: inherit;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>音声評価システム</h1>
+            <div class="instruction">
+                <strong>評価方法：</strong> 各音声を聞いて、13項目について-3から+3の7段階で評価してください。<br>
+                音声は何度でも再生可能です。すべての項目を評価してから次に進んでください。
+            </div>
+        </div>
+
+        <div id="start-screen" class="start-screen">
+            <div class="info-form">
+                <h3>基本情報（任意）</h3>
+                <div class="form-group">
+                    <label for="age">年齢：</label>
+                    <input type="number" id="age" min="1" max="120" placeholder="例：25">
+                </div>
+                <div class="form-group">
+                    <label for="gender">性別：</label>
+                    <select id="gender">
+                        <option value="">選択してください</option>
+                        <option value="male">男性</option>
+                        <option value="female">女性</option>
+                        <option value="other">その他</option>
+                        <option value="not_specified">回答しない</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn" onclick="startEvaluation()">評価を開始</button>
+        </div>
+
+        <div id="evaluation-screen" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div id="progress-text">サンプル 1 / 10</div>
+
+            <!-- デバッグ情報 -->
+            <div class="debug-info" id="debug-info">
+                <h4>🔧 デバッグ情報</h4>
+                <div id="debug-content">読み込み中...</div>
+            </div>
+
+            <div class="audio-section">
+                <div class="audio-controls">
+                    <audio id="audio-player" controls preload="auto">
+                        <source id="audio-source" src="" type="audio/wav">
+                        お使いのブラウザは音声の再生に対応していません。
+                    </audio>
+                    <button class="btn btn-secondary" onclick="replayAudio()">再生</button>
+                </div>
+            </div>
+
+            <div class="evaluation-warning" id="evaluation-warning" style="display: none;">
+                すべての評価項目にお答えください
+            </div>
+
+            <!-- 表形式の評価UI -->
+            <table class="evaluation-table" id="evaluation-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="item-name">評価項目</th>
+                        <th colspan="7">評価スケール</th>
+                        <th rowspan="2" class="item-name">評価項目</th>
+                    </tr>
+                    <tr>
+                        <th class="scale-labels">-3</th>
+                        <th class="scale-labels">-2</th>
+                        <th class="scale-labels">-1</th>
+                        <th class="scale-labels">0</th>
+                        <th class="scale-labels">1</th>
+                        <th class="scale-labels">2</th>
+                        <th class="scale-labels">3</th>
+                    </tr>
+                </thead>
+                <tbody id="evaluation-tbody">
+                    <!-- 評価項目は動的に生成 -->
+                </tbody>
+            </table>
+
+            <div class="navigation">
+                <button class="btn btn-secondary" id="prev-btn" onclick="previousSample()" disabled>前のサンプル</button>
+                <div id="sample-counter">サンプル 1 / 10</div>
+                <button class="btn" id="next-btn" onclick="nextSample()" disabled>次のサンプル</button>
+            </div>
+        </div>
+
+        <div class="completion-screen" id="completion-screen">
+            <h2>🎉 評価完了！</h2>
+            <p>10個すべての音声サンプルの評価が完了しました。</p>
+            <div class="results-summary">
+                <h3>結果概要</h3>
+                <p>評価データはGitHub Gistに自動保存され、同時にCSV形式でローカルにもダウンロードされます。</p>
+                <p>データには評価時刻、音声ファイル情報、各評価項目の値が含まれています。</p>
+                <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 14px;">
+                    <strong>📝 設定が必要：</strong> コード内の <code>YOUR_GITHUB_TOKEN</code> を実際のGitHub Personal Access Tokenに置き換えてください。
+                </div>
+            </div>
+            <button class="btn" onclick="downloadResults()">結果を保存・ダウンロード</button>
+            <button class="btn btn-secondary" onclick="restartEvaluation()">評価をやり直す</button>
+        </div>
+    </div>
+
+    <script>
+        // 評価項目の定義
+        const evaluationItems = [
+            {
+                "Name": "機械的な声",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "機械的な声",
+                "MaxLabel": "自然な声"
+            },
+            {
+                "Name": "低い声",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "低い声",
+                "MaxLabel": "高い声"
+            },
+            {
+                "Name": "モブ感のある声",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "モブ感のある声",
+                "MaxLabel": "リーダー感のある声"
+            },
+            {
+                "Name": "表現力のない声",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "表現力のない声",
+                "MaxLabel": "表現力のある声"
+            },
+            {
+                "Name": "老い",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "老い",
+                "MaxLabel": "若い"
+            },
+            {
+                "Name": "きびしい",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "きびしい",
+                "MaxLabel": "やすらか"
+            },
+            {
+                "Name": "信頼できない",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "信頼できない",
+                "MaxLabel": "信頼できる"
+            },
+            {
+                "Name": "ブサボ",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "ブサボ",
+                "MaxLabel": "イケボ"
+            },
+            {
+                "Name": "聞きづらい",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "聞きづらい",
+                "MaxLabel": "聞きやすい"
+            },
+            {
+                "Name": "無個性",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "無個性",
+                "MaxLabel": "個性的である"
+            },
+            {
+                "Name": "アツい声",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "アツい声",
+                "MaxLabel": "爽やかな声"
+            },
+            {
+                "Name": "安定感のない声",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "安定感のない声",
+                "MaxLabel": "安定感のある声"
+            },
+            {
+                "Name": "音の響きなし",
+                "Min": -3,
+                "Max": 3,
+                "Step": 1,
+                "MinLabel": "音の響きなし",
+                "MaxLabel": "音の響きあり"
+            }
+        ];
+
+        // グローバル変数
+        let currentSampleIndex = 0;
+        let audioSamples = [];
+        let evaluationResults = [];
+        let currentEvaluations = {};
+        let userInfo = {};
+
+        // 音声ファイルリストの生成（V1→V2の順序で実行）
+        function generateAudioFileList() {
+            const audioFiles = [];
+            const rates = ['0.5', '0.75', '1.0', '1.25', '1.5'];
+            
+            // V1からランダムに1つのオーディオフォルダを選択（1-5）
+            const v1AudioNumber = Math.floor(Math.random() * 5) + 1;
+            
+            // V2からランダムに1つのオーディオフォルダを選択（6-10）
+            const v2AudioNumbers = [6, 7, 8, 9, 10];
+            const v2AudioNumber = v2AudioNumbers[Math.floor(Math.random() * v2AudioNumbers.length)];
+            // V2のファイル名用の番号（audio6→1, audio7→2, audio8→3, audio9→4, audio10→5）
+            const v2FileNumber = v2AudioNumber - 5;
+            
+            // V1のファイル生成（最初の5サンプル）
+            rates.forEach(rate => {
+                const fileName = `V1-${v1AudioNumber}-${rate}.wav`;
+                audioFiles.push({
+                    version: 'V1',
+                    audioNumber: v1AudioNumber,
+                    rate: rate,
+                    fileName: fileName,
+                    path: `audio/V1/audio${v1AudioNumber}/${fileName}`
+                });
+            });
+            
+            // V1内でシャッフル
+            const v1Files = shuffleArray([...audioFiles]);
+            
+            // V2のファイル生成（次の5サンプル）
+            const v2Files = [];
+            rates.forEach(rate => {
+                const fileName = `V2-${v2FileNumber}-${rate}.wav`;
+                v2Files.push({
+                    version: 'V2',
+                    audioNumber: v2AudioNumber,
+                    fileNumber: v2FileNumber,
+                    rate: rate,
+                    fileName: fileName,
+                    path: `audio/V2/audio${v2AudioNumber}/${fileName}`
+                });
+            });
+            
+            // V2内でシャッフル
+            const shuffledV2Files = shuffleArray(v2Files);
+            
+            // V1→V2の順序で結合
+            return [...v1Files, ...shuffledV2Files];
+        }
+
+        // 配列をシャッフルする関数
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        // デバッグ情報の更新
+        function updateDebugInfo() {
+            if (audioSamples.length === 0) return;
+            
+            const sample = audioSamples[currentSampleIndex];
+            const debugContent = `
+                <strong>現在の音声:</strong> ${sample.fileName}<br>
+                <strong>バージョン:</strong> ${sample.version}<br>
+                <strong>オーディオ番号:</strong> ${sample.audioNumber}<br>
+                ${sample.fileNumber ? `<strong>ファイル番号:</strong> ${sample.fileNumber}<br>` : ''}
+                <strong>再生速度:</strong> ${sample.rate}x<br>
+                <strong>パス:</strong> ${sample.path}<br>
+                <strong>サンプル番号:</strong> ${currentSampleIndex + 1} / ${audioSamples.length}
+            `;
+            document.getElementById('debug-content').innerHTML = debugContent;
+        }
+
+        // デバッグモード切り替え（本番時はコメントアウト）
+        function toggleDebugMode() {
+            const debugInfo = document.getElementById('debug-info');
+            debugInfo.classList.toggle('hidden');
+        }
+
+        // 評価開始
+        function startEvaluation() {
+            // ユーザー情報を保存
+            userInfo.age = document.getElementById('age').value || null;
+            userInfo.gender = document.getElementById('gender').value || null;
+            
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('evaluation-screen').style.display = 'block';
+            
+            initializeEvaluation();
+        }
+
+        // 初期化
+        function initializeEvaluation() {
+            audioSamples = generateAudioFileList();
+            evaluationResults = [];
+            currentSampleIndex = 0;
+            currentEvaluations = {};
+            
+            generateEvaluationTable();
+            loadCurrentSample();
+            updateProgress();
+        }
+
+        // 表形式の評価UIを生成
+        function generateEvaluationTable() {
+            const tbody = document.getElementById('evaluation-tbody');
+            tbody.innerHTML = '';
+            
+            evaluationItems.forEach((item, index) => {
+                const row = document.createElement('tr');
+                
+                // 左の項目名
+                const leftLabelCell = document.createElement('td');
+                leftLabelCell.className = 'item-name';
+                leftLabelCell.textContent = item.MinLabel;
+                row.appendChild(leftLabelCell);
+                
+                // ラジオボタン（-3 から 3）
+                for (let value = item.Min; value <= item.Max; value++) {
+                    const cell = document.createElement('td');
+                    cell.className = 'radio-cell';
+                    
+                    const radio = document.createElement('input');
+                    radio.type = 'radio';
+                    radio.name = `evaluation-${index}`;
+                    radio.value = value;
+                    radio.onchange = () => updateEvaluation(index, value);
+                    
+                    cell.appendChild(radio);
+                    row.appendChild(cell);
+                }
+                
+                // 右の項目名
+                const rightLabelCell = document.createElement('td');
+                rightLabelCell.className = 'item-name';
+                rightLabelCell.textContent = item.MaxLabel;
+                row.appendChild(rightLabelCell);
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        // 評価値の更新
+        function updateEvaluation(itemIndex, value) {
+            currentEvaluations[itemIndex] = parseInt(value);
+            
+            // すべての項目が評価されているかチェック
+            const allEvaluated = Object.keys(currentEvaluations).length === evaluationItems.length;
+            document.getElementById('next-btn').disabled = !allEvaluated;
+            
+            const warningElement = document.getElementById('evaluation-warning');
+            if (allEvaluated) {
+                warningElement.style.display = 'none';
+            } else {
+                warningElement.style.display = 'block';
+            }
+        }
+
+        // 現在のサンプルを読み込み
+        function loadCurrentSample() {
+            const sample = audioSamples[currentSampleIndex];
+            document.getElementById('audio-source').src = sample.path;
+            document.getElementById('audio-player').load();
+            
+            // デバッグ情報を更新
+            updateDebugInfo();
+            
+            // 評価値をリセット
+            currentEvaluations = {};
+            
+            // ラジオボタンをすべてリセット
+            evaluationItems.forEach((item, index) => {
+                const radios = document.querySelectorAll(`input[name="evaluation-${index}"]`);
+                radios.forEach(radio => radio.checked = false);
+            });
+            
+            // ボタンの状態を更新
+            document.getElementById('prev-btn').disabled = currentSampleIndex === 0;
+            document.getElementById('next-btn').disabled = true;
+            document.getElementById('evaluation-warning').style.display = 'block';
+        }
+
+        // 進捗の更新
+        function updateProgress() {
+            const progress = ((currentSampleIndex + 1) / audioSamples.length) * 100;
+            document.getElementById('progress-fill').style.width = progress + '%';
+            document.getElementById('progress-text').textContent = `サンプル ${currentSampleIndex + 1} / ${audioSamples.length}`;
+            document.getElementById('sample-counter').textContent = `サンプル ${currentSampleIndex + 1} / ${audioSamples.length}`;
+        }
+
+        // 次のサンプルへ
+        function nextSample() {
+            // すべての項目が評価されているかチェック
+            if (Object.keys(currentEvaluations).length !== evaluationItems.length) {
+                document.getElementById('evaluation-warning').style.display = 'block';
+                return;
+            }
+
+            // 現在の評価を保存
+            const sample = audioSamples[currentSampleIndex];
+            const result = {
+                timestamp: new Date().toISOString(),
+                sampleIndex: currentSampleIndex,
+                audioFile: sample.fileName,
+                version: sample.version,
+                audioNumber: sample.audioNumber,
+                fileNumber: sample.fileNumber || null,
+                rate: sample.rate,
+                path: sample.path,
+                evaluations: evaluationItems.map((_, index) => currentEvaluations[index])
+            };
+            
+            evaluationResults.push(result);
+            
+            // 次のサンプルへ
+            currentSampleIndex++;
+            
+            if (currentSampleIndex >= audioSamples.length) {
+                // 評価完了
+                showCompletionScreen();
+            } else {
+                loadCurrentSample();
+                updateProgress();
+            }
+        }
+
+        // 前のサンプルへ
+        function previousSample() {
+            if (currentSampleIndex > 0) {
+                currentSampleIndex--;
+                
+                // 前の評価結果を復元
+                const previousResult = evaluationResults[currentSampleIndex];
+                if (previousResult) {
+                    // 評価値を復元
+                    currentEvaluations = {};
+                    previousResult.evaluations.forEach((value, index) => {
+                        currentEvaluations[index] = value;
+                        const radio = document.querySelector(`input[name="evaluation-${index}"][value="${value}"]`);
+                        if (radio) radio.checked = true;
+                    });
+                    
+                    document.getElementById('next-btn').disabled = false;
+                    document.getElementById('evaluation-warning').style.display = 'none';
+                }
+                
+                loadCurrentSample();
+                updateProgress();
+            }
+        }
+
+        // 音声再生
+        function replayAudio() {
+            const audio = document.getElementById('audio-player');
+            audio.currentTime = 0;
+            audio.play();
+        }
+
+        // 完了画面を表示
+        function showCompletionScreen() {
+            document.getElementById('evaluation-screen').style.display = 'none';
+            document.getElementById('completion-screen').style.display = 'block';
+        }
+
+        // CSVダウンロード（文字化け対策版）
+        function downloadResultsAsCSV(resultData) {
+            const headers = ['Timestamp', 'Age', 'Gender', 'SampleIndex', 'AudioFile', 'Version', 'AudioNumber', 'FileNumber', 'Rate', 'Path', 
+                            ...evaluationItems.map(item => item.Name)];
+            
+            // BOM付きUTF-8でCSV作成（Excel対応）
+            const csvContent = [headers.join(',')];
+            
+            resultData.results.forEach(result => {
+                const row = [
+                    `"${result.timestamp}"`,
+                    `"${resultData.userInfo.age || ''}"`,
+                    `"${resultData.userInfo.gender || ''}"`,
+                    result.sampleIndex,
+                    `"${result.audioFile}"`,
+                    `"${result.version}"`,
+                    result.audioNumber,
+                    result.fileNumber || '',
+                    result.rate,
+                    `"${result.path}"`,
+                    ...result.evaluations
+                ];
+                csvContent.push(row.join(','));
+            });
+            
+            // BOM付きでBlob作成
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + csvContent.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `voice_evaluation_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // GitHubリポジトリにCSVを保存する関数
+        async function saveResultsToGitHub(resultData) {
+            try {
+                const headers = ['Timestamp', 'Age', 'Gender', 'SampleIndex', 'AudioFile', 'Version', 'AudioNumber', 'FileNumber', 'Rate', 'Path', 
+                                ...evaluationItems.map(item => item.Name)];
+                
+                const csvContent = [headers.join(',')];
+                
+                resultData.results.forEach(result => {
+                    const row = [
+                        `"${result.timestamp}"`,
+                        `"${resultData.userInfo.age || ''}"`,
+                        `"${resultData.userInfo.gender || ''}"`,
+                        result.sampleIndex,
+                        `"${result.audioFile}"`,
+                        `"${result.version}"`,
+                        result.audioNumber,
+                        result.fileNumber || '',
+                        result.rate,
+                        `"${result.path}"`,
+                        ...result.evaluations
+                    ];
+                    csvContent.push(row.join(','));
+                });
+                
+                const BOM = '\uFEFF';
+                const csvString = BOM + csvContent.join('\n');
+                
+                // ファイル名を生成（ユニークID付き）
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const uniqueId = Math.random().toString(36).substr(2, 9);
+                const filename = `voice_evaluation_${timestamp}_${uniqueId}.csv`;
+                
+                // GitHub Issues APIを使用してデータを保存
+                const issueData = {
+                    title: `音声評価結果 - ${timestamp}`,
+                    body: `## 音声評価結果データ\n\n**ファイル名:** ${filename}  \n**評価時刻:** ${resultData.timestamp}  \n**年齢:** ${resultData.userInfo.age || '未入力'}  \n**性別:** ${resultData.userInfo.gender || '未入力'}  \n**総サンプル数:** ${resultData.totalSamples}\n\n### CSVデータ\n\`\`\`csv\n${csvString}\n\`\`\``,
+                    labels: ['evaluation-data']
+                };
+                
+                // GitHubリポジトリ情報（設定が必要）
+                const GITHUB_REPO_OWNER = 'YOUR_USERNAME'; // ここを変更
+                const GITHUB_REPO_NAME = 'voice-evaluation-data'; // ここを変更
+                const GITHUB_TOKEN = 'YOUR_GITHUB_TOKEN'; // GitHub Personal Access Tokenが必要
+                
+                const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `token ${GITHUB_TOKEN}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(issueData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('GitHub保存成功:', result);
+                    showSaveSuccess('GitHub');
+                    return true;
+                } else {
+                    throw new Error(`GitHub API エラー: ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('GitHub保存エラー:', error);
+                showSaveError('GitHub', error.message);
+                return false;
+            }
+        }
+
+        // より良い方法：GitHub Gistを使用
+        async function saveResultsToGitHubGist(resultData) {
+            try {
+                const headers = ['Timestamp', 'Age', 'Gender', 'SampleIndex', 'AudioFile', 'Version', 'AudioNumber', 'FileNumber', 'Rate', 'Path', 
+                                ...evaluationItems.map(item => item.Name)];
+                
+                const csvContent = [headers.join(',')];
+                
+                resultData.results.forEach(result => {
+                    const row = [
+                        `"${result.timestamp}"`,
+                        `"${resultData.userInfo.age || ''}"`,
+                        `"${resultData.userInfo.gender || ''}"`,
+                        result.sampleIndex,
+                        `"${result.audioFile}"`,
+                        `"${result.version}"`,
+                        result.audioNumber,
+                        result.fileNumber || '',
+                        result.rate,
+                        `"${result.path}"`,
+                        ...result.evaluations
+                    ];
+                    csvContent.push(row.join(','));
+                });
+                
+                const BOM = '\uFEFF';
+                const csvString = BOM + csvContent.join('\n');
+                
+                // ファイル名を生成
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const uniqueId = Math.random().toString(36).substr(2, 9);
+                const filename = `voice_evaluation_${timestamp}_${uniqueId}.csv`;
+                
+                // Gistデータ
+                const gistData = {
+                    description: `音声評価結果 - ${timestamp}`,
+                    public: false, // privateに設定
+                    files: {
+                        [filename]: {
+                            content: csvString
+                        },
+                        "metadata.json": {
+                            content: JSON.stringify({
+                                timestamp: resultData.timestamp,
+                                userInfo: resultData.userInfo,
+                                totalSamples: resultData.totalSamples,
+                                evaluationItems: resultData.evaluationItems
+                            }, null, 2)
+                        }
+                    }
+                };
+                
+                // GitHub Personal Access Token（設定が必要）
+                const GITHUB_TOKEN = 'YOUR_GITHUB_TOKEN'; // ここを変更
+                
+                const response = await fetch('https://api.github.com/gists', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `token ${GITHUB_TOKEN}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(gistData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('GitHub Gist保存成功:', result);
+                    showSaveSuccess('GitHub Gist', result.html_url);
+                    return result.html_url;
+                } else {
+                    throw new Error(`GitHub Gist API エラー: ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('GitHub Gist保存エラー:', error);
+                showSaveError('GitHub Gist', error.message);
+                return false;
+            }
+        }
+
+        // 保存成功メッセージ表示
+        function showSaveSuccess(platform = 'サーバー', url = null) {
+            const successDiv = document.createElement('div');
+            let message = `✅ データが${platform}に正常に保存されました！`;
+            if (url) {
+                message += `<br><a href="${url}" target="_blank" style="color: #155724; text-decoration: underline;">保存されたデータを確認</a>`;
+            }
+            successDiv.innerHTML = `
+                <div style="background: #d4edda; color: #155724; border: 1px solid #c3e6cb; padding: 12px; border-radius: 5px; margin: 10px 0;">
+                    ${message}
+                </div>
+            `;
+            document.querySelector('.results-summary').appendChild(successDiv);
+        }
+
+        // 保存エラーメッセージ表示
+        function showSaveError(platform = 'サーバー', errorMessage) {
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML = `
+                <div style="background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px; border-radius: 5px; margin: 10px 0;">
+                    ❌ ${platform}保存に失敗しました: ${errorMessage}<br>
+                    <small>ローカルダウンロードをご利用ください。</small>
+                </div>
+            `;
+            document.querySelector('.results-summary').appendChild(errorDiv);
+        }
+
+        // 結果ダウンロード・保存
+        async function downloadResults() {
+            const resultData = {
+                timestamp: new Date().toISOString(),
+                userInfo: userInfo,
+                totalSamples: audioSamples.length,
+                evaluationItems: evaluationItems,
+                results: evaluationResults
+            };
+            
+            // GitHub Gistに保存を試行（推奨）
+            const gistUrl = await saveResultsToGitHubGist(resultData);
+            
+            // ローカルダウンロードも実行
+            downloadResultsAsCSV(resultData);
+        }
+
+        // 評価をやり直し
+        function restartEvaluation() {
+            document.getElementById('completion-screen').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'block';
+            
+            // フォームをリセット
+            document.getElementById('age').value = '';
+            document.getElementById('gender').value = '';
+        }
+
+        // キーボードショートカット
+        document.addEventListener('keydown', function(event) {
+            if (document.getElementById('evaluation-screen').style.display !== 'none') {
+                if (event.key === 'ArrowLeft' && !document.getElementById('prev-btn').disabled) {
+                    previousSample();
+                } else if (event.key === 'ArrowRight' && !document.getElementById('next-btn').disabled) {
+                    nextSample();
+                } else if (event.key === ' ') {
+                    event.preventDefault();
+                    replayAudio();
+                } else if (event.key === 'd' && event.ctrlKey) {
+                    // Ctrl+D でデバッグモード切り替え
+                    event.preventDefault();
+                    toggleDebugMode();
+                }
+            }
+        });
+
+        // 本番用：ページ読み込み時にデバッグ情報を隠す
+        // document.addEventListener('DOMContentLoaded', function() {
+        //     document.getElementById('debug-info').classList.add('hidden');
+        // });
+    </script>
+</body>
+</html>
